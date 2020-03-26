@@ -1,0 +1,10 @@
+{
+    "python.pythonPath": "/home/michael/anaconda3/envs/pixplot",
+    //"python.pythonPath": "/home/michael/anaconda3/envs/tensorflow_two_gpu/bin/python",
+    "python.linting.pylintPath": "/home/michael/anaconda3/envs/tensorflow_CPU/bin/pylint",
+    //"python.linting.pylintPath": "/home/michael/anaconda3/envs/tensorflow_two_gpu/bin/pylint",
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.pylintArgs": ["--extension-pkg-whitelist=cv2", "--disable=C"],
+    "python.dataScience.textOutputLimit":0
+}
