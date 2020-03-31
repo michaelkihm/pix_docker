@@ -19,6 +19,8 @@ from umap import UMAP
 import tensorflow as tf
 from hdbscan import HDBSCAN
 from scipy.stats import kde
+from residualunit import ResidualUnit
+from clusteringlayer import ClusteringLayer
 import matplotlib.pyplot as plt
 from rasterfairy import coonswarp
 from iiif_downloader import Manifest
@@ -382,25 +384,68 @@ def get_layouts(*args, **kwargs):
 
 
 def vectorize_images(**kwargs):
-  '''Create and return vector representation of Image() instances'''
-  print(' * preparing to vectorize {} images'.format(len(kwargs['image_paths'])))
-  vector_dir = os.path.join(kwargs['out_dir'], 'image-vectors')
-  if not os.path.exists(vector_dir): os.makedirs(vector_dir)
-  base = InceptionV3(include_top=True, weights='imagenet',)
-  model = Model(inputs=base.input, outputs=base.get_layer('avg_pool').output)
-  print(' * creating image array')
-  vecs = []
-  for idx, i in enumerate(stream_images(**kwargs)):
-    vector_path = os.path.join(vector_dir, os.path.basename(i.path) + '.npy')
-    if os.path.exists(vector_path) and kwargs['use_cache']:
-      vec = np.load(vector_path)
+    '''Create and return vector representation of Image() instances'''
+    print(
+        ' * preparing to vectorize {} images'.format(len(kwargs['image_paths'])))
+    vector_dir = os.path.join(kwargs['out_dir'], 'image-vectors')
+    if not os.path.exists(vector_dir):
+        os.makedirs(vector_dir)
+    resnet = "resnet"
+    resnet_trained = "resnet_trained"
+    inception = "inception"
+    weights = kwargs['weights']
+    clusters = int(kwargs['cnn_clusters'])
+    image_size = tuple([int(i) for i in kwargs['image_size']])
+   
+    if kwargs['model'].lower() == resnet:
+        model = keras.models.Sequential()
+        model.add(keras.layers.Conv2D(64, kernel_size=7,
+                                    strides=2, input_shape=(*image_size, 3)))
+        model.add(keras.layers.BatchNormalization())
+        model.add(keras.layers.Activation("relu"))
+        model.add(keras.layers.MaxPool2D(pool_size=3, strides=2, padding="SAME"))
+        prev_filters = 64
+        # for filters in [64] * 3 + [128] * 4 + [256] * 6 + [512] * 3:
+        for filters in [64] * 1 + [128] * 2 + [256] * 3 + [512] * 3:
+            strides = 1 if filters == prev_filters else 2
+            model.add(ResidualUnit(filters, strides=strides))
+            prev_filters = filters
+        model.add(keras.layers.GlobalAvgPool2D())
+        model.add(keras.layers.Flatten())
+        model.add(keras.layers.Dense(units=clusters, name='embedding'))
+        model.add(ClusteringLayer(clusters))
+        model.load_weights(weights)
+    elif kwargs['model'].lower() == inception:
+        image_size = (299,299)
+        base = keras.applications.InceptionV3(include_top=True, weights='imagenet',)
+        model = keras.models.Model(inputs=base.input, outputs=base.get_layer('avg_pool').output)
+    elif kwargs['model'].lower() == resnet_trained:
+        resnet = keras.applications.ResNet50(
+                weights=None, include_top=False, input_shape=(*image_size, 3))
+        x = keras.layers.Flatten()(resnet.output)
+        x = keras.layers.Dense(units=clusters, name='embedding')(x)
+        x = ClusteringLayer(clusters)(x)
+        model = keras.models.Model(inputs=resnet.input,outputs = [x])
+        model.load_weights(weights)
     else:
-      im = preprocess_input( img_to_array( i.original.resize((299,299)) ) )
-      vec = model.predict(np.expand_dims(im, 0)).squeeze()
-      np.save(vector_path, vec)
-    vecs.append(vec)
-    print(' * vectorized {}/{} images'.format(idx+1, len(kwargs['image_paths'])))
-  return np.array(vecs)
+        raise ValueError("Unknown CNN network model!")
+
+    print(' * creating image array')
+    vecs = []
+    for idx, i in enumerate(stream_images(**kwargs)):
+        vector_path = os.path.join(
+            vector_dir, os.path.basename(i.path) + '.npy')
+        if os.path.exists(vector_path) and kwargs['use_cache']:
+            vec = np.load(vector_path)
+        else:
+            im = keras.applications.inception_v3.preprocess_input(keras.preprocessing.image.img_to_array(
+                i.original.resize(image_size)))
+            vec = model.predict(np.expand_dims(im, 0)).squeeze()
+            np.save(vector_path, vec)
+        vecs.append(vec)
+        print(' * vectorized {}/{} images'.format(idx +
+                                                  1, len(kwargs['image_paths'])))
+    return np.array(vecs)
 
 
 def get_umap_projection(**kwargs):
@@ -685,6 +730,14 @@ def parse():
                         help='shuffle the input images before data processing begins')
     parser.add_argument('--plot_id', type=str, default=config['plot_id'],
                         help='unique id for a plot; useful for resuming processing on a started plot')
+    parser.add_argument('--model', type=str, default='resnet',
+                        help = 'cnn network to vectorize image. 1. inception \n2. resnet \n3. resnet_trained')
+    parser.add_argument('--image_size', nargs="+", required=True,
+                        help = 'image size of input images')
+    parser.add_argument('--cnn_clusters', type=str, default=100,
+                        help= 'Number of clusters of CNN output layer. Only reqired for Deep embedded models')
+    parser.add_argument('--weights', type=str,
+                        help='Weights to be loaded to model. Should be a keras model file in .h5 file format')
     config.update(vars(parser.parse_args()))
     process_images(**config)
 
