@@ -1,0 +1,16 @@
+version: '3.5'
+
+services:
+  pixplot:
+    container_name: pixplot
+    build:
+      context: ./docker
+      network: host
+    ports:
+        - "80:5000"
+    volumes:
+      - /home/mkihm/Code/pix_docker/pixplot:/home
+      - /home/mkihm/Images/test_oeff:/home/images
+      - /media/daicloud02/S-Deeplearning/Datensammlung fuer Bilddatenbank/:/home/oeff/
+    working_dir: /home
+

@@ -9,8 +9,8 @@ services:
     ports:
         - "5000:5000"
     volumes:
-      - /home/michael/Desktop/oeff/:/home
-      #- /home/michael/Desktop/oeff/oeff_resized/:/home/images
-      - /home/michael/Desktop/images/:/home/images
+      - /home/michael/Documents/pix-plot/pixplot/:/home
+      - /home/michael/Desktop/test_oeff/:/home/images
+      #- /home/michael/Desktop/test_oeff/:/home/images
     working_dir: /home
 
